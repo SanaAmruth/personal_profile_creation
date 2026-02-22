@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import sqlite3 from 'sqlite3';
+import { createClient } from '@libsql/client';
 
 dotenv.config();
 
@@ -21,7 +22,9 @@ const {
   SESSION_SECRET,
   GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET,
-  APP_BASE_URL
+  APP_BASE_URL,
+  TURSO_DATABASE_URL,
+  TURSO_AUTH_TOKEN
 } = process.env;
 
 if (!SESSION_SECRET || !GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET || !APP_BASE_URL) {
@@ -46,51 +49,93 @@ app.use(
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// SQLite setup
-const dbPath = path.join(__dirname, 'data.db');
-const db = new sqlite3.Database(dbPath);
+// Database setup
+let db;
+let isTurso = false;
 
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    profile_json TEXT,
-    favorites_json TEXT,
-    deployed_url TEXT,
-    created_at TEXT NOT NULL
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS github_tokens (
-    user_id INTEGER PRIMARY KEY,
-    access_token TEXT NOT NULL,
-    login TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-  )`);
-});
+if (TURSO_DATABASE_URL && TURSO_AUTH_TOKEN) {
+  console.log('Using Turso Cloud Database');
+  db = createClient({
+    url: TURSO_DATABASE_URL,
+    authToken: TURSO_AUTH_TOKEN
+  });
+  isTurso = true;
+} else {
+  console.log('Using local SQLite database');
+  const dbPath = path.join(__dirname, 'data.db');
+  const sqliteDb = new sqlite3.Database(dbPath);
 
-db.all(`PRAGMA table_info(users)`, (err, rows) => {
-  if (err) return;
-  const hasDeployed = rows.some((row) => row.name === 'deployed_url');
-  if (!hasDeployed) {
-    db.run(`ALTER TABLE users ADD COLUMN deployed_url TEXT`);
+  // Wrap sqlite3 for promise compatibility similar to libsql
+  db = {
+    execute: (sql, params = []) => new Promise((resolve, reject) => {
+      sqliteDb.run(sql, params, function (err) {
+        if (err) reject(err);
+        else resolve({ lastInsertRowid: this.lastID, rowsAffected: this.changes });
+      });
+    }),
+    executeAll: (sql, params = []) => new Promise((resolve, reject) => {
+      sqliteDb.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve({ rows });
+      });
+    }),
+    executeGet: (sql, params = []) => new Promise((resolve, reject) => {
+      sqliteDb.get(sql, params, (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    })
+  };
+
+  sqliteDb.serialize(() => {
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      profile_json TEXT,
+      favorites_json TEXT,
+      deployed_url TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    sqliteDb.run(`CREATE TABLE IF NOT EXISTS github_tokens (
+      user_id INTEGER PRIMARY KEY,
+      access_token TEXT NOT NULL,
+      login TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`);
+  });
+}
+
+// Helper for unified DB access
+async function performQuery(sql, params = []) {
+  if (isTurso) {
+    const result = await db.execute({ sql, args: params });
+    return result;
+  } else {
+    // Handled by the wrapper above
+    return db.execute(sql, params);
   }
-});
+}
 
-const dbRun = (sql, params = []) =>
-  new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve(this);
-    });
-  });
-const dbGet = (sql, params = []) =>
-  new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  });
+async function getQuery(sql, params = []) {
+  if (isTurso) {
+    const result = await db.execute({ sql, args: params });
+    return result.rows[0];
+  } else {
+    return db.executeGet(sql, params);
+  }
+}
+
+async function getAllQuery(sql, params = []) {
+  if (isTurso) {
+    const result = await db.execute({ sql, args: params });
+    return result.rows;
+  } else {
+    const result = await db.executeAll(sql, params);
+    return result.rows;
+  }
+}
 
 function requireLogin(req, res, next) {
   if (!req.session?.userId) {
@@ -105,11 +150,11 @@ app.post('/api/auth/register', async (req, res) => {
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   try {
     const normalizedEmail = String(email).trim().toLowerCase();
-    const existing = await dbGet('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    const existing = await getQuery('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
     if (existing) return res.status(409).json({ error: 'Email already in use' });
     const hash = await bcrypt.hash(password, 12);
     const now = new Date().toISOString();
-    await dbRun(
+    await performQuery(
       'INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)',
       [normalizedEmail, hash, now]
     );
@@ -125,7 +170,7 @@ app.post('/api/auth/login', async (req, res) => {
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   try {
     const normalizedEmail = String(email).trim().toLowerCase();
-    const user = await dbGet('SELECT id, password_hash FROM users WHERE email = ?', [normalizedEmail]);
+    const user = await getQuery('SELECT id, password_hash FROM users WHERE email = ?', [normalizedEmail]);
     if (!user) {
       return req.session.destroy(() =>
         res.status(401).json({ error: 'Account not found. Please sign up.' })
@@ -152,13 +197,13 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/me', (req, res) => {
   if (!req.session?.userId) return res.json({ user: null });
-  dbGet('SELECT id, email, deployed_url FROM users WHERE id = ?', [req.session.userId])
+  getQuery('SELECT id, email, deployed_url FROM users WHERE id = ?', [req.session.userId])
     .then((user) => res.json({ user: user || null }))
     .catch(() => res.json({ user: null }));
 });
 
 app.get('/api/github/status', requireLogin, (req, res) => {
-  dbGet('SELECT login FROM github_tokens WHERE user_id = ?', [req.session.userId])
+  getQuery('SELECT login FROM github_tokens WHERE user_id = ?', [req.session.userId])
     .then((row) => {
       res.json({ connected: Boolean(row), login: row?.login || null });
     })
@@ -166,7 +211,7 @@ app.get('/api/github/status', requireLogin, (req, res) => {
 });
 
 app.post('/api/github/disconnect', requireLogin, (req, res) => {
-  dbRun('DELETE FROM github_tokens WHERE user_id = ?', [req.session.userId])
+  performQuery('DELETE FROM github_tokens WHERE user_id = ?', [req.session.userId])
     .then(() => res.json({ ok: true }))
     .catch(() => res.status(500).json({ error: 'Failed to disconnect' }));
 });
@@ -192,13 +237,13 @@ app.post('/api/profile', requireLogin, (req, res) => {
     achievements,
     links
   });
-  dbRun('UPDATE users SET profile_json = ? WHERE id = ?', [profileJson, req.session.userId])
+  performQuery('UPDATE users SET profile_json = ? WHERE id = ?', [profileJson, req.session.userId])
     .then(() => res.json({ ok: true }))
     .catch(() => res.status(500).json({ error: 'Failed to save profile' }));
 });
 
 app.get('/api/profile', requireLogin, (req, res) => {
-  dbGet('SELECT profile_json FROM users WHERE id = ?', [req.session.userId])
+  getQuery('SELECT profile_json FROM users WHERE id = ?', [req.session.userId])
     .then((row) => {
       const profile = row?.profile_json ? JSON.parse(row.profile_json) : null;
       res.json({ profile });
@@ -211,14 +256,14 @@ app.post('/api/favorites', requireLogin, (req, res) => {
   if (!templateId || !['add', 'remove'].includes(action)) {
     return res.status(400).json({ error: 'templateId and valid action required' });
   }
-  dbGet('SELECT favorites_json FROM users WHERE id = ?', [req.session.userId])
+  getQuery('SELECT favorites_json FROM users WHERE id = ?', [req.session.userId])
     .then((row) => {
       const current = row?.favorites_json ? JSON.parse(row.favorites_json) : [];
       const favs = new Set(current);
       if (action === 'add') favs.add(templateId);
       if (action === 'remove') favs.delete(templateId);
       const favorites = Array.from(favs);
-      return dbRun('UPDATE users SET favorites_json = ? WHERE id = ?', [
+      return performQuery('UPDATE users SET favorites_json = ? WHERE id = ?', [
         JSON.stringify(favorites),
         req.session.userId
       ]).then(() => res.json({ ok: true, favorites }));
@@ -227,7 +272,7 @@ app.post('/api/favorites', requireLogin, (req, res) => {
 });
 
 app.get('/api/favorites', requireLogin, (req, res) => {
-  dbGet('SELECT favorites_json FROM users WHERE id = ?', [req.session.userId])
+  getQuery('SELECT favorites_json FROM users WHERE id = ?', [req.session.userId])
     .then((row) => {
       const favorites = row?.favorites_json ? JSON.parse(row.favorites_json) : [];
       res.json({ favorites });
@@ -279,13 +324,14 @@ app.get('/auth/github/callback', requireLogin, async (req, res) => {
       });
       const userJson = await userRes.json();
       ghLogin = userJson?.login || null;
-    } catch {}
+    } catch { }
 
     const now = new Date().toISOString();
-    await dbRun(
-      'INSERT INTO github_tokens (user_id, access_token, login, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET access_token=excluded.access_token, login=excluded.login, created_at=excluded.created_at',
-      [req.session.userId, tokenJson.access_token, ghLogin, now]
-    );
+    let sql = 'INSERT INTO github_tokens (user_id, access_token, login, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET access_token=excluded.access_token, login=excluded.login, created_at=excluded.created_at';
+    if (isTurso) {
+      // Turso syntax for UPSERT if different, but standard SQLite works
+    }
+    await performQuery(sql, [req.session.userId, tokenJson.access_token, ghLogin, now]);
     res.redirect('/#host-ready');
   } catch (err) {
     console.error(err);
@@ -301,13 +347,13 @@ app.post('/api/host', requireLogin, async (req, res) => {
   }
 
   try {
-    const tokenRow = await dbGet('SELECT access_token FROM github_tokens WHERE user_id = ?', [
+    const tokenRow = await getQuery('SELECT access_token FROM github_tokens WHERE user_id = ?', [
       req.session.userId
     ]);
     if (!tokenRow?.access_token) {
       return res.status(401).json({ error: 'GitHub not connected' });
     }
-    const profileRow = await dbGet('SELECT profile_json FROM users WHERE id = ?', [req.session.userId]);
+    const profileRow = await getQuery('SELECT profile_json FROM users WHERE id = ?', [req.session.userId]);
     const profile = profileRow?.profile_json ? JSON.parse(profileRow.profile_json) : null;
     if (!profile) {
       return res.status(400).json({ error: 'Template and profile required' });
@@ -372,7 +418,7 @@ app.post('/api/host', requireLogin, async (req, res) => {
     }
 
     const pagesUrl = `https://${me.login}.github.io/${repoName}/`;
-    await dbRun('UPDATE users SET deployed_url = ? WHERE id = ?', [pagesUrl, req.session.userId]);
+    await performQuery('UPDATE users SET deployed_url = ? WHERE id = ?', [pagesUrl, req.session.userId]);
     res.json({
       ok: true,
       repoUrl: repo.html_url,
