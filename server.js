@@ -53,7 +53,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 let db;
 let isTurso = false;
 
-if (TURSO_DATABASE_URL && TURSO_AUTH_TOKEN) {
+if (typeof TURSO_DATABASE_URL === 'string' && TURSO_DATABASE_URL.trim() !== '' &&
+  typeof TURSO_AUTH_TOKEN === 'string' && TURSO_AUTH_TOKEN.trim() !== '') {
   console.log('Using Turso Cloud Database');
   db = createClient({
     url: TURSO_DATABASE_URL,
@@ -65,7 +66,6 @@ if (TURSO_DATABASE_URL && TURSO_AUTH_TOKEN) {
   const dbPath = path.join(__dirname, 'data.db');
   const sqliteDb = new sqlite3.Database(dbPath);
 
-  // Wrap sqlite3 for promise compatibility similar to libsql
   db = {
     execute: (sql, params = []) => new Promise((resolve, reject) => {
       sqliteDb.run(sql, params, function (err) {
@@ -86,9 +86,11 @@ if (TURSO_DATABASE_URL && TURSO_AUTH_TOKEN) {
       });
     })
   };
+}
 
-  sqliteDb.serialize(() => {
-    sqliteDb.run(`CREATE TABLE IF NOT EXISTS users (
+async function initDb() {
+  try {
+    const usersTable = `CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
@@ -96,16 +98,24 @@ if (TURSO_DATABASE_URL && TURSO_AUTH_TOKEN) {
       favorites_json TEXT,
       deployed_url TEXT,
       created_at TEXT NOT NULL
-    )`);
-    sqliteDb.run(`CREATE TABLE IF NOT EXISTS github_tokens (
+    )`;
+    const githubTable = `CREATE TABLE IF NOT EXISTS github_tokens (
       user_id INTEGER PRIMARY KEY,
       access_token TEXT NOT NULL,
       login TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-    )`);
-  });
+    )`;
+
+    await performQuery(usersTable);
+    await performQuery(githubTable);
+    console.log('Database tables initialized');
+  } catch (err) {
+    console.error('Failed to initialize database:', err);
+  }
 }
+
+initDb();
 
 // Helper for unified DB access
 async function performQuery(sql, params = []) {
