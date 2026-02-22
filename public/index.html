@@ -13,7 +13,9 @@
         <button class="ghost nav-home" id="nav-home">Home</button>
       </div>
       <div class="logo nav-center">Portfolio Builder</div>
-      <div id="auth-bar" class="nav-right"></div>
+      <div class="nav-right">
+        <div id="auth-bar"></div>
+      </div>
     </nav>
 
     <section id="auth-section" class="panel">
@@ -43,115 +45,102 @@
     </section>
 
     <section id="form-section" class="panel hidden">
-      <div class="builder-header">
-        <div>
-          <h1>Build your personal site</h1>
-          <p>Fill only what you want. We’ll use whatever you provide.</p>
-        </div>
-        <button id="save-profile">Save & pick a template</button>
-      </div>
-
       <div class="builder-layout builder-empty" id="builder-layout">
-        <div class="section-selector">
-          <button class="selector-btn" data-target="basics">Basics</button>
-          <button class="selector-btn" data-target="education">Education</button>
-          <button class="selector-btn" data-target="experience">Work</button>
-          <button class="selector-btn" data-target="projects">Projects</button>
-          <button class="selector-btn" data-target="skills">Skills</button>
-          <button class="selector-btn" data-target="achievements">Achievements</button>
-          <button class="selector-btn" data-target="links">Links</button>
-        </div>
-
-        <div class="details-panel">
-          <div class="detail-panel hidden" data-panel="basics">
-            <div class="profile-card" id="panel-basics">
-              <div class="profile-head">
-                <div>
-                  <h2>Basics</h2>
-                  <p>Start with your name and headline.</p>
-                </div>
-                <div class="avatar">+</div>
-              </div>
-              <div class="profile-fields">
-                <label>Name</label>
-                <input id="basic-name" placeholder="Your name" required />
-                <label>Headline</label>
-                <input id="basic-headline" placeholder="Designer, Developer, Founder" />
-                <label>Email</label>
-                <input id="basic-email" type="email" placeholder="you@example.com" />
-                <label>Phone</label>
-                <input id="basic-phone" placeholder="+1 555 123 4567" />
-                <label>Location</label>
-                <input id="basic-location" placeholder="City, Country" />
-              <label>Website</label>
-              <input id="basic-website" placeholder="https://your-site.com" />
-              <label>Profile photo (optional)</label>
-              <div class="photo-row">
-                <input id="basic-photo" type="file" accept="image/*" />
-                <img id="basic-photo-preview" class="photo-preview hidden" alt="Profile preview" />
-              </div>
-              <label>Resume (PDF, optional)</label>
-              <div class="photo-row">
-                <input id="basic-resume" type="file" accept="application/pdf" />
-                <span id="basic-resume-name" class="resume-name hidden"></span>
-              </div>
-              <label>Short bio</label>
-              <textarea id="basic-bio" rows="3" placeholder="A short intro about you."></textarea>
-              </div>
+        <div class="builder-left">
+          <div class="builder-header">
+            <div>
+              <h1>Build your personal site</h1>
+              <p>Fill only what you want. We’ll use whatever you provide.</p>
             </div>
           </div>
+          <div class="section-stack">
+            <div class="section-card collapsed" data-accordion="basics">
+              <div class="section-head">
+                <div>
+                  <h3>Basic info</h3>
+                  <p>Start with your name and headline.</p>
+                </div>
+                <div class="section-actions">
+                  <select class="entry-select" data-section="basics"></select>
+                </div>
+              </div>
+              <div class="section-body">
+                <div class="profile-fields">
+                  <label>Name</label>
+                  <input id="basic-name" placeholder="Your name" required />
+                  <label>Headline</label>
+                  <input id="basic-headline" placeholder="Designer, Developer, Founder" />
+                  <label>Email</label>
+                  <input id="basic-email" type="email" placeholder="you@example.com" />
+                  <label>Phone</label>
+                  <input id="basic-phone" placeholder="+1 555 123 4567" />
+                  <label>Location</label>
+                  <input id="basic-location" placeholder="City, Country" />
+                <label>Website</label>
+                <input id="basic-website" placeholder="https://your-site.com" />
+                <label>Profile photo (optional)</label>
+                <div class="photo-row">
+                  <input id="basic-photo" type="file" accept="image/*" />
+                  <img id="basic-photo-preview" class="photo-preview hidden" alt="Profile preview" />
+                </div>
+                <label>Resume (PDF, optional)</label>
+                <div class="photo-row">
+                  <input id="basic-resume" type="file" accept="application/pdf" />
+                  <span id="basic-resume-name" class="resume-name hidden"></span>
+                </div>
+                <label>Short bio</label>
+                <textarea id="basic-bio" rows="3" placeholder="A short intro about you."></textarea>
+                </div>
+              </div>
+            </div>
 
-          <div class="detail-panel hidden" data-panel="education">
-            <div class="section-card" id="panel-education">
+            <div class="section-card collapsed" data-accordion="education">
               <div class="section-head">
                 <div>
                   <h3>Education</h3>
                   <p>Add your degrees and certifications.</p>
                 </div>
                 <div class="section-actions">
-                  <button class="ghost add-entry" data-section="education">Add entry</button>
+                  <select class="entry-select" data-section="education"></select>
                 </div>
               </div>
               <div class="section-body" id="section-education"></div>
             </div>
-          </div>
 
-          <div class="detail-panel hidden" data-panel="experience">
-            <div class="section-card" id="panel-experience">
+            <div class="section-card collapsed" data-accordion="experience">
               <div class="section-head">
                 <div>
                   <h3>Work Experience</h3>
                   <p>Highlight roles and impact.</p>
                 </div>
                 <div class="section-actions">
-                  <button class="ghost add-entry" data-section="experience">Add entry</button>
+                  <select class="entry-select" data-section="experience"></select>
                 </div>
               </div>
               <div class="section-body" id="section-experience"></div>
             </div>
-          </div>
 
-          <div class="detail-panel hidden" data-panel="projects">
-            <div class="section-card" id="panel-projects">
+            <div class="section-card collapsed" data-accordion="projects">
               <div class="section-head">
                 <div>
                   <h3>Projects</h3>
                   <p>Show off what you’ve built.</p>
                 </div>
                 <div class="section-actions">
-                  <button class="ghost add-entry" data-section="projects">Add entry</button>
+                  <select class="entry-select" data-section="projects"></select>
                 </div>
               </div>
               <div class="section-body" id="section-projects"></div>
             </div>
-          </div>
 
-          <div class="detail-panel hidden" data-panel="skills">
-            <div class="section-card" id="panel-skills">
+            <div class="section-card collapsed" data-accordion="skills">
               <div class="section-head">
                 <div>
                   <h3>Skills</h3>
                   <p>List the tools and strengths you want to show.</p>
+                </div>
+                <div class="section-actions">
+                  <select class="entry-select" data-section="skills"></select>
                 </div>
               </div>
               <div class="section-body" id="section-skills">
@@ -161,37 +150,57 @@
                 <div id="skills-chips" class="chip-row"></div>
               </div>
             </div>
-          </div>
 
-          <div class="detail-panel hidden" data-panel="achievements">
-            <div class="section-card" id="panel-achievements">
+            <div class="section-card collapsed" data-accordion="achievements">
               <div class="section-head">
                 <div>
                   <h3>Achievements</h3>
                   <p>Awards, certifications, milestones.</p>
                 </div>
                 <div class="section-actions">
-                  <button class="ghost add-entry" data-section="achievements">Add entry</button>
+                  <select class="entry-select" data-section="achievements"></select>
                 </div>
               </div>
               <div class="section-body" id="section-achievements"></div>
             </div>
-          </div>
 
-          <div class="detail-panel hidden" data-panel="links">
-            <div class="section-card" id="panel-links">
+            <div class="section-card collapsed" data-accordion="links">
               <div class="section-head">
                 <div>
                   <h3>Links</h3>
-                  <p>Portfolio, GitHub, Dribbble, socials.</p>
                 </div>
                 <div class="section-actions">
-                  <button class="ghost add-entry" data-section="links">Add entry</button>
+                  <select class="entry-select" data-section="links"></select>
                 </div>
               </div>
-              <div class="section-body" id="section-links"></div>
+              <div class="section-body">
+                <div class="links-fixed">
+                  <label>LinkedIn (optional)</label>
+                  <input id="basic-linkedin" placeholder="https://linkedin.com/in/username" />
+                  <label>GitHub (optional)</label>
+                  <input id="basic-github" placeholder="https://github.com/username" />
+                </div>
+                <div id="section-links"></div>
+              </div>
             </div>
           </div>
+        </div>
+
+        <div class="builder-preview">
+          <div class="preview-header">
+            <div class="preview-actions">
+              <button id="github-connect" class="secondary">Connect GitHub</button>
+              <button id="github-cancel" class="ghost hidden">Cancel</button>
+            </div>
+            <div class="preview-deploy">
+              <button id="deploy-btn" class="primary">Deploy</button>
+              <div id="deploy-status" class="status-text"></div>
+            </div>
+          </div>
+          <div class="preview-shell">
+            <iframe id="live-preview" title="Live preview" src="/preview.html?template=profile"></iframe>
+          </div>
+          <div class="preview-footer"></div>
         </div>
       </div>
     </section>

@@ -1,6 +1,7 @@
 const authSection = document.getElementById('auth-section');
 const formSection = document.getElementById('form-section');
 const templatesSection = document.getElementById('templates-section');
+const livePreview = document.getElementById('live-preview');
 const authBar = document.getElementById('auth-bar');
 const navHome = document.getElementById('nav-home');
 
@@ -16,10 +17,8 @@ const editInfoBtn = document.getElementById('edit-info');
 const hostBtn = document.getElementById('host-btn');
 const hostStatus = document.getElementById('host-status');
 
-const saveProfileBtn = document.getElementById('save-profile');
-const selectorButtons = document.querySelectorAll('.selector-btn');
-const detailPanels = document.querySelectorAll('.detail-panel');
-const builderLayout = document.getElementById('builder-layout');
+const deployBtn = document.getElementById('deploy-btn');
+const deployStatus = document.getElementById('deploy-status');
 const basicsInputs = {
   name: document.getElementById('basic-name'),
   headline: document.getElementById('basic-headline'),
@@ -27,6 +26,8 @@ const basicsInputs = {
   phone: document.getElementById('basic-phone'),
   location: document.getElementById('basic-location'),
   website: document.getElementById('basic-website'),
+  linkedin: document.getElementById('basic-linkedin'),
+  github: document.getElementById('basic-github'),
   bio: document.getElementById('basic-bio'),
   photo: document.getElementById('basic-photo'),
   resume: document.getElementById('basic-resume')
@@ -49,6 +50,10 @@ const templates = [
 ];
 
 const sectionDefs = {
+  basics: {
+    label: 'Basic info',
+    fields: []
+  },
   education: {
     label: 'Education',
     fields: [
@@ -106,6 +111,10 @@ let selectedTemplate = null;
 let githubReady = false;
 let activeSection = null;
 let activeIndex = null;
+let canAutoSave = false;
+/** When set, the inline editor is open; draft data is merged into live preview until Save/Cancel. */
+let currentInlineEditor = null;
+let autosaveTimer = null;
 
 function emptyProfile() {
   return {
@@ -194,24 +203,37 @@ async function init() {
     initBuilder(emptyProfile());
   } else {
     profileState = normalizeProfile(currentProfile);
-    show(templatesSection);
-    renderTemplates();
+    show(formSection);
+    initBuilder(profileState);
   }
 
   const ghStatus = await fetch('/api/github/status').then((r) => r.json());
   githubReady = Boolean(ghStatus.connected);
   if (githubReady) {
-    const ghLabel = ghStatus.login ? `GitHub connected (${ghStatus.login}). Select a template and host.` : 'GitHub connected. Select a template and host.';
-    hostStatus.textContent = ghLabel;
-    githubConnect.textContent = 'GitHub Connected';
+    githubConnect.textContent = ghStatus.login ? `GitHub connected (${ghStatus.login})` : 'GitHub connected';
     githubConnect.disabled = true;
     githubCancel.classList.remove('hidden');
+    deployBtn.classList.remove('btn-disabled');
+    deployBtn.setAttribute('aria-disabled', 'false');
+    if (me.user?.deployed_url) {
+      deployStatus.textContent = 'Live site';
+      deployStatus.onclick = () => window.open(me.user.deployed_url, '_blank');
+      deployStatus.style.cursor = 'pointer';
+      deployStatus.classList.remove('hidden');
+    } else {
+      deployStatus.textContent = '';
+      deployStatus.onclick = null;
+      deployStatus.style.cursor = '';
+      deployStatus.classList.add('hidden');
+    }
   } else {
-    hostStatus.textContent = 'Connect GitHub to host your site.';
     githubConnect.textContent = 'Connect GitHub';
     githubConnect.disabled = false;
     githubCancel.classList.add('hidden');
-    hostBtn.disabled = true;
+    deployBtn.classList.add('btn-disabled');
+    deployBtn.setAttribute('aria-disabled', 'true');
+    deployStatus.textContent = 'Connect GitHub to deploy.';
+    deployStatus.classList.remove('hidden');
   }
 
   if (window.location.hash === '#host-ready') {
@@ -296,29 +318,63 @@ githubCancel.addEventListener('click', async () => {
   hostBtn.disabled = true;
 });
 
-hostBtn.addEventListener('click', async () => {
-  if (!selectedTemplate) return;
-  hostBtn.disabled = true;
-  hostStatus.textContent = 'Creating repo and deploying...';
+deployBtn.addEventListener('click', async () => {
+  if (!githubReady) {
+    deployStatus.textContent = 'Connect GitHub to deploy.';
+    return;
+  }
+  deployBtn.disabled = true;
+  deployStatus.textContent = 'Saving and deploying...';
+
+  const basics = readBasicsInputs();
+  if (!basics.name) {
+    alert('Name is required.');
+    deployBtn.disabled = false;
+    deployStatus.textContent = 'Name is required.';
+    return;
+  }
+
+  const payload = buildProfilePayload();
+
+  const saveRes = await fetch('/api/profile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!saveRes.ok) {
+    deployStatus.textContent = 'Save failed';
+    deployBtn.disabled = false;
+    return;
+  }
+
   const res = await fetch('/api/host', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ templateId: selectedTemplate })
+    body: JSON.stringify({ templateId: 'profile' })
   });
   const json = await res.json();
   if (res.ok) {
-    hostStatus.innerHTML = `Live: <a href="${json.pagesUrl}" target="_blank">${json.pagesUrl}</a>`;
+    deployStatus.textContent = 'Live site';
+    deployStatus.onclick = () => window.open(json.pagesUrl, '_blank');
+    deployStatus.style.cursor = 'pointer';
+    deployStatus.classList.remove('hidden');
+    if (currentProfile) {
+      currentProfile.deployed_url = json.pagesUrl;
+    }
   } else {
-    hostStatus.textContent = json.error || 'Hosting failed';
+    deployStatus.textContent = json.error || 'Deploy failed';
   }
-  hostBtn.disabled = false;
+  deployBtn.disabled = false;
 });
 
 function initBuilder(profile) {
   profileState = profile;
   setBasicsInputs(profile.basics || {});
   renderSections();
-  setActivePanel(null);
+  initAccordion();
+  syncLivePreview();
+  canAutoSave = true;
 }
 
 function setBasicsInputs(basics) {
@@ -369,6 +425,99 @@ function readBasicsInputs() {
   return basics;
 }
 
+function buildProfilePayload() {
+  const basics = readBasicsInputs();
+  return {
+    basics,
+    education: profileState.education,
+    experience: profileState.experience,
+    projects: profileState.projects,
+    skills: profileState.skills,
+    achievements: profileState.achievements,
+    links: profileState.links
+  };
+}
+
+function queueAutoSave() {
+  if (!canAutoSave) return;
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(async () => {
+    const payload = buildProfilePayload();
+    try {
+      await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.error('Auto-save failed', err);
+    }
+  }, 700);
+}
+
+function buildLiveProfile() {
+  const basics = readBasicsInputs();
+  let education = profileState.education;
+  let experience = profileState.experience;
+  let projects = profileState.projects;
+  let achievements = profileState.achievements;
+  let links = profileState.links;
+
+  if (currentInlineEditor?.element?.isConnected) {
+    const def = sectionDefs[currentInlineEditor.sectionId];
+    const draft = collectEntryData(def, currentInlineEditor.element);
+    const arr = [...(profileState[currentInlineEditor.sectionId] || [])];
+    if (currentInlineEditor.index !== null) {
+      arr[currentInlineEditor.index] = draft;
+    } else {
+      arr.push(draft);
+    }
+    if (currentInlineEditor.sectionId === 'education') education = arr;
+    else if (currentInlineEditor.sectionId === 'experience') experience = arr;
+    else if (currentInlineEditor.sectionId === 'projects') projects = arr;
+    else if (currentInlineEditor.sectionId === 'achievements') achievements = arr;
+    else if (currentInlineEditor.sectionId === 'links') links = arr;
+  } else if (currentInlineEditor) {
+    currentInlineEditor = null;
+  }
+
+  return {
+    basics,
+    education,
+    experience,
+    projects,
+    skills: profileState.skills,
+    achievements,
+    links
+  };
+}
+
+let previewRafId = null;
+let pendingPreviewSection = null;
+
+/**
+ * Sync profile to the live preview iframe.
+ * @param {string|null} onlyUpdateSection - If set (e.g. 'education', 'experience'), the preview updates only that section's DOM. Otherwise full render.
+ */
+function syncLivePreview(onlyUpdateSection = null) {
+  if (!livePreview) return;
+  const payload = buildLiveProfile();
+  livePreview.contentWindow?.postMessage({ type: 'profile', profile: payload, onlyUpdateSection: onlyUpdateSection || undefined }, '*');
+}
+
+/** Throttled sync while typing: one update per animation frame so the preview feels like a live text editor (FlowCV-style). */
+function syncLivePreviewAfterTyping(onlyUpdateSection) {
+  if (!livePreview) return;
+  pendingPreviewSection = onlyUpdateSection;
+  if (previewRafId != null) return;
+  previewRafId = requestAnimationFrame(() => {
+    previewRafId = null;
+    const section = pendingPreviewSection ?? null;
+    pendingPreviewSection = null;
+    syncLivePreview(section);
+  });
+}
+
 basicsInputs.photo?.addEventListener('change', (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -410,6 +559,8 @@ basicsInputs.photo?.addEventListener('change', (event) => {
         photoPreview.src = dataUrl;
         photoPreview.classList.remove('hidden');
       }
+      syncLivePreview();
+      queueAutoSave();
     };
     img.src = String(reader.result || '');
   };
@@ -444,6 +595,8 @@ basicsInputs.resume?.addEventListener('change', (event) => {
       resumeName.textContent = file.name;
       resumeName.classList.remove('hidden');
     }
+    syncLivePreview();
+    queueAutoSave();
   };
   reader.readAsDataURL(file);
 });
@@ -452,25 +605,76 @@ function renderSections() {
   Object.keys(sectionDefs).forEach((sectionId) => {
     const container = document.getElementById(`section-${sectionId}`);
     const items = profileState[sectionId] || [];
-    if (sectionId !== 'skills') {
-      container.innerHTML = '';
-    }
-
-    if (!items.length) {
-      if (sectionId !== 'skills') {
-        const empty = document.createElement('div');
-        empty.className = 'entry-item';
-        empty.textContent = 'No entries yet.';
-        container.appendChild(empty);
-        return;
+    const card = document.querySelector(`.section-card[data-accordion="${sectionId}"]`);
+    const actions = card?.querySelector('.section-actions');
+    if (actions) {
+      if (sectionId === 'basics' || sectionId === 'skills') {
+        actions.classList.remove('hidden');
+      } else {
+        actions.classList.add('hidden');
       }
     }
 
+    if (sectionId === 'basics') {
+      const select = document.querySelector(`.entry-select[data-section="basics"]`);
+      if (select) {
+        select.innerHTML = '';
+        const editOption = document.createElement('option');
+        editOption.value = '__edit__';
+        editOption.textContent = 'Edit';
+        select.appendChild(editOption);
+        select.value = '__edit__';
+      }
+      return;
+    }
+    if (sectionId !== 'skills' && container) {
+      container.innerHTML = '';
+    }
+
     if (sectionId === 'skills') {
+      const select = document.querySelector(`.entry-select[data-section="skills"]`);
+      if (select) {
+        select.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = '__edit__';
+        opt.textContent = 'Edit';
+        select.appendChild(opt);
+        select.value = '__edit__';
+      }
       renderSkillChips();
       return;
     }
 
+    const select = document.querySelector(`.entry-select[data-section="${sectionId}"]`);
+    if (select) {
+      select.innerHTML = '';
+      if (items.length) {
+        items.forEach((item, index) => {
+          const summary = getEntrySummary(sectionId, item);
+          const option = document.createElement('option');
+          option.value = String(index);
+          option.textContent = summary.title || `Entry ${index + 1}`;
+          select.appendChild(option);
+        });
+      }
+      const addOption = document.createElement('option');
+      addOption.value = '__new__';
+      addOption.textContent = 'Add entry';
+      select.appendChild(addOption);
+      select.value = items.length ? '0' : '__new__';
+    }
+
+    if (!container) return;
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'entry-actions-row';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'add-entry-btn';
+    addBtn.innerHTML = '<span class="add-entry-plus">+</span><span>Add Entry</span>';
+    addBtn.onclick = () => openInlineEditor(sectionId);
+    actionsRow.appendChild(addBtn);
+    container.appendChild(actionsRow);
+    if (!items.length) return;
     const list = document.createElement('div');
     list.className = 'entry-list';
 
@@ -495,7 +699,7 @@ function renderSections() {
         item.skills.forEach((skill) => {
           const chip = document.createElement('span');
           chip.className = 'chip';
-          chip.textContent = skill?.name || skill;
+          chip.textContent = typeof skill === 'string' ? skill : safeStr(skill?.name) || '';
           chipRow.appendChild(chip);
         });
         info.appendChild(chipRow);
@@ -507,7 +711,7 @@ function renderSections() {
       const editBtn = document.createElement('button');
       editBtn.className = 'ghost';
       editBtn.textContent = 'Edit';
-      editBtn.onclick = () => openModal(sectionId, index);
+      editBtn.onclick = () => openInlineEditor(sectionId, index);
 
       const delBtn = document.createElement('button');
       delBtn.className = 'secondary';
@@ -515,6 +719,8 @@ function renderSections() {
       delBtn.onclick = () => {
         profileState[sectionId].splice(index, 1);
         renderSections();
+        syncLivePreview();
+        queueAutoSave();
       };
 
       actions.append(editBtn, delBtn);
@@ -524,41 +730,46 @@ function renderSections() {
 
     container.appendChild(list);
   });
+  initDropdowns();
 }
 
+
+function safeStr(val) {
+  return val != null && typeof val === 'string' ? val : '';
+}
 
 function getEntrySummary(sectionId, item) {
   if (!item) return { title: 'Untitled', meta: '' };
   switch (sectionId) {
     case 'education':
       return {
-        title: [item.degree, item.school].filter(Boolean).join(' · ') || 'Education entry',
-        meta: [item.location, dateRange(item.startDate, item.endDate)].filter(Boolean).join(' · ')
+        title: [safeStr(item.degree), safeStr(item.school)].filter(Boolean).join(' · ') || 'Education entry',
+        meta: [safeStr(item.location), dateRange(safeStr(item.startDate), safeStr(item.endDate))].filter(Boolean).join(' · ')
       };
     case 'experience':
       return {
-        title: [item.title, item.company].filter(Boolean).join(' · ') || 'Experience entry',
-        meta: [item.location, dateRange(item.startDate, item.endDate)].filter(Boolean).join(' · ')
+        title: [safeStr(item.title), safeStr(item.company)].filter(Boolean).join(' · ') || 'Experience entry',
+        meta: [safeStr(item.location), dateRange(safeStr(item.startDate), safeStr(item.endDate))].filter(Boolean).join(' · ')
       };
     case 'projects':
       return {
-        title: item.name || 'Project',
-        meta: item.link || ''
+        title: safeStr(item.name) || 'Project',
+        meta: safeStr(item.link)
       };
     case 'skills':
       return {
-        title: item.name || 'Skill',
+        title: safeStr(item.name) || 'Skill',
         meta: ''
       };
     case 'achievements':
       return {
-        title: item.name || 'Achievement',
+        title: safeStr(item.name) || 'Achievement',
         meta: ''
       };
     case 'links':
       return {
-        title: item.label || item.url || 'Link',
-        meta: item.url || ''
+        title: safeStr(item.label) || safeStr(item.url) || 'Link',
+        meta: safeStr(item.url)
       };
     default:
       return { title: 'Entry', meta: '' };
@@ -573,15 +784,11 @@ function dateRange(start, end) {
   return startFmt || endFmt;
 }
 
-function openModal(sectionId, index = null) {
-  activeSection = sectionId;
-  activeIndex = index;
-  modalFields.innerHTML = '';
-  const def = sectionDefs[sectionId];
-  const item = index !== null ? profileState[sectionId][index] : {};
+function entryFieldValue(val) {
+  return val != null && typeof val === 'string' ? val : '';
+}
 
-  modalTitle.textContent = index !== null ? `Edit ${def.label}` : `Add ${def.label}`;
-
+function buildEntryFields(def, item, fieldsContainer, onFieldChange) {
   def.fields.forEach((field) => {
     const wrapper = document.createElement('div');
     const label = document.createElement('label');
@@ -594,23 +801,25 @@ function openModal(sectionId, index = null) {
         input = document.createElement('div');
         input.className = 'rte';
         input.contentEditable = 'true';
-        input.innerHTML = item?.[field.key] || '';
+        input.innerHTML = entryFieldValue(item?.[field.key]);
         input.dataset.rte = 'true';
+        if (onFieldChange) input.addEventListener('input', onFieldChange);
         wrapper.append(label, toolbar, input);
-        modalFields.appendChild(wrapper);
+        fieldsContainer.appendChild(wrapper);
         return;
       }
       input = document.createElement('textarea');
       input.rows = 3;
       input.name = field.key;
-      input.value = item?.[field.key] || '';
+      input.value = entryFieldValue(item?.[field.key]);
+      if (onFieldChange) input.addEventListener('input', onFieldChange);
       wrapper.append(label, input);
-      modalFields.appendChild(wrapper);
+      fieldsContainer.appendChild(wrapper);
       return;
     }
     if (field.type === 'chips') {
       const chips = Array.isArray(item?.[field.key]) ? item[field.key] : [];
-      const chipItems = chips.map((c) => (typeof c === 'string' ? c : c?.name)).filter(Boolean);
+      const chipItems = chips.map((c) => (typeof c === 'string' ? c : (c && typeof c.name === 'string' ? c.name : ''))).filter(Boolean);
       input = document.createElement('input');
       input.name = field.key;
       input.placeholder = field.placeholder || 'Add a value and press Enter';
@@ -622,6 +831,7 @@ function openModal(sectionId, index = null) {
 
       const syncChipItems = (nextItems) => {
         input.dataset.chips = JSON.stringify(nextItems);
+        if (onFieldChange) onFieldChange();
       };
 
       const renderChips = () => {
@@ -630,7 +840,7 @@ function openModal(sectionId, index = null) {
         items.forEach((value, idx) => {
           const chip = document.createElement('span');
           chip.className = 'chip';
-          chip.textContent = value;
+          chip.textContent = typeof value === 'string' ? value : (value && typeof value.name === 'string' ? value.name : '');
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.textContent = '×';
@@ -670,13 +880,13 @@ function openModal(sectionId, index = null) {
       renderChips();
       row.append(input, chipRow);
       wrapper.append(label, row);
-      modalFields.appendChild(wrapper);
+      fieldsContainer.appendChild(wrapper);
       return;
     }
     input = document.createElement('input');
     if (field.type) input.type = field.type;
     input.name = field.key;
-    input.value = item?.[field.key] || '';
+    input.value = entryFieldValue(item?.[field.key]);
 
     if (field.type === 'month') {
       const row = document.createElement('div');
@@ -685,26 +895,109 @@ function openModal(sectionId, index = null) {
       input.readOnly = true;
       input.className = 'month-input';
       input.placeholder = 'MM/YY';
-      input.dataset.value = input.value;
+      input.dataset.value = entryFieldValue(item?.[field.key]);
       const inputWrap = document.createElement('div');
       inputWrap.className = 'month-input-wrap';
       const icon = document.createElement('span');
       icon.className = 'calendar-icon';
       icon.textContent = '📅';
       inputWrap.append(input, icon);
-      const picker = buildMonthPicker(input, inputWrap);
+      const picker = buildMonthPicker(input, inputWrap, onFieldChange);
       row.append(inputWrap);
       wrapper.append(label, row, picker);
     } else {
+      if (onFieldChange) input.addEventListener('input', onFieldChange);
       wrapper.append(label, input);
     }
-    modalFields.appendChild(wrapper);
+    fieldsContainer.appendChild(wrapper);
   });
-
-  modal.classList.remove('hidden');
 }
 
-function buildMonthPicker(input, anchor) {
+function collectEntryData(def, rootEl) {
+  const data = {};
+  def.fields.forEach((field) => {
+    if (field.key === 'description') {
+      const rte = rootEl.querySelector('.rte');
+      data[field.key] = sanitizeHtml(rte?.innerHTML || '');
+      return;
+    }
+    if (field.type === 'chips') {
+      const input = rootEl.querySelector(`[name="${field.key}"]`);
+      const items = JSON.parse(input?.dataset?.chips || '[]');
+      data[field.key] = items.map((name) => ({ name }));
+      return;
+    }
+    const input = rootEl.querySelector(`[name="${field.key}"]`);
+    if (field.type === 'month') {
+      data[field.key] = input?.dataset?.value || '';
+    } else {
+      data[field.key] = input?.value?.trim?.() || '';
+    }
+  });
+  return data;
+}
+
+function openInlineEditor(sectionId, index = null) {
+  const container = document.getElementById(`section-${sectionId}`);
+  if (!container) return;
+  container.querySelectorAll('.inline-editor').forEach((el) => el.remove());
+  currentInlineEditor = null;
+  const def = sectionDefs[sectionId];
+  const item = index !== null ? profileState[sectionId][index] : {};
+
+  const onFieldChange = () => syncLivePreviewAfterTyping(currentInlineEditor ? currentInlineEditor.sectionId : null);
+
+  const editor = document.createElement('div');
+  editor.className = 'inline-editor';
+  const title = document.createElement('div');
+  title.className = 'inline-title';
+  title.textContent = index !== null ? `Edit ${def.label}` : `Add ${def.label}`;
+  const fields = document.createElement('div');
+  fields.className = 'inline-fields';
+  buildEntryFields(def, item, fields, onFieldChange);
+  const actions = document.createElement('div');
+  actions.className = 'inline-actions';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'secondary';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.onclick = () => {
+    currentInlineEditor = null;
+    editor.remove();
+  };
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'btn';
+  saveBtn.textContent = 'Save entry';
+  saveBtn.onclick = () => {
+    currentInlineEditor = null;
+    const data = collectEntryData(def, editor);
+    if (data.startDate && data.endDate && data.endDate < data.startDate) {
+      alert('End date must be after start date.');
+      return;
+    }
+    if (index !== null) {
+      profileState[sectionId][index] = data;
+    } else {
+      profileState[sectionId].push(data);
+    }
+    renderSections();
+    syncLivePreview();
+    queueAutoSave();
+  };
+  actions.append(cancelBtn, saveBtn);
+  editor.append(title, fields, actions);
+  const list = container.querySelector('.entry-list');
+  if (list) {
+    container.insertBefore(editor, list);
+  } else {
+    container.appendChild(editor);
+  }
+  currentInlineEditor = { sectionId, index, element: editor };
+  syncLivePreview();
+}
+
+function buildMonthPicker(input, anchor, onMonthChange) {
   const picker = document.createElement('div');
   picker.className = 'month-picker';
   picker.classList.add('hidden');
@@ -724,6 +1017,8 @@ function buildMonthPicker(input, anchor) {
 
   let year = new Date().getFullYear();
   let selectedMonth = null;
+  let monthChosen = false;
+  let yearChosen = false;
 
   const updateInputDisplay = () => {
     if (selectedMonth === null) {
@@ -736,6 +1031,7 @@ function buildMonthPicker(input, anchor) {
     input.dataset.value = `${year}-${monthValue}`;
     const shortYear = String(year).slice(-2);
     input.value = `${monthValue}/${shortYear}`;
+    if (onMonthChange) onMonthChange();
   };
 
   const renderGrid = () => {
@@ -748,8 +1044,12 @@ function buildMonthPicker(input, anchor) {
       btn.textContent = label;
       btn.onclick = () => {
         selectedMonth = idx;
+        monthChosen = true;
         updateInputDisplay();
         renderGrid();
+        if (monthChosen && yearChosen) {
+          picker.classList.add('hidden');
+        }
         setTimeout(() => btn.scrollIntoView({ block: 'nearest' }), 0);
       };
       monthList.appendChild(btn);
@@ -760,8 +1060,14 @@ function buildMonthPicker(input, anchor) {
   const setFromValue = () => {
     const value = input.dataset.value || input.value || '';
     const [y, m] = value.split('-');
-    if (y) year = Number(y);
-    if (m) selectedMonth = Number(m) - 1;
+    if (y) {
+      year = Number(y);
+      yearChosen = true;
+    }
+    if (m) {
+      selectedMonth = Number(m) - 1;
+      monthChosen = true;
+    }
     updateInputDisplay();
     renderGrid();
   };
@@ -779,27 +1085,33 @@ function buildMonthPicker(input, anchor) {
       if (y === year) btn.classList.add('selected');
       btn.onclick = () => {
         year = y;
+        yearChosen = true;
         updateInputDisplay();
         renderGrid();
+        if (monthChosen && yearChosen) {
+          picker.classList.add('hidden');
+        }
         setTimeout(() => btn.scrollIntoView({ block: 'nearest' }), 0);
       };
       yearList.appendChild(btn);
     }
   };
 
-  const toggle = () => {
-    picker.classList.toggle('hidden');
+  const openPicker = () => {
+    picker.classList.remove('hidden');
   };
-  input.addEventListener('click', toggle);
+  input.addEventListener('click', openPicker);
   anchor?.addEventListener('click', (event) => {
     if (event.target === input) return;
-    toggle();
+    openPicker();
   });
 
   document.addEventListener('click', (event) => {
     if (picker.classList.contains('hidden')) return;
     if (picker.contains(event.target) || input.contains(event.target) || anchor?.contains(event.target)) return;
-    picker.classList.add('hidden');
+    if (monthChosen && yearChosen) {
+      picker.classList.add('hidden');
+    }
   });
 
   setFromValue();
@@ -860,6 +1172,8 @@ modalForm.addEventListener('submit', (e) => {
   }
 
   renderSections();
+  syncLivePreview();
+  queueAutoSave();
   closeModal();
 });
 
@@ -879,40 +1193,12 @@ modalClose.addEventListener('click', closeModal);
 modalCancel.addEventListener('click', closeModal);
 modalBackdrop.addEventListener('click', closeModal);
 
-saveProfileBtn.addEventListener('click', async () => {
-  const basics = readBasicsInputs();
-  if (!basics.name) {
-    alert('Name is required.');
-    return;
-  }
-  if (basics.photo && basics.photo.length > 1_000_000) {
-    alert('Profile photo is too large. Please upload a smaller image.');
-    basics.photo = '';
-  }
-
-  const payload = {
-    basics,
-    education: profileState.education,
-    experience: profileState.experience,
-    projects: profileState.projects,
-    skills: profileState.skills,
-    achievements: profileState.achievements,
-    links: profileState.links
-  };
-
-  const res = await fetch('/api/profile', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+Object.values(basicsInputs).forEach((input) => {
+  if (!input) return;
+  input.addEventListener('input', () => {
+    syncLivePreviewAfterTyping(null);
+    queueAutoSave();
   });
-
-  if (res.ok) {
-    currentProfile = payload;
-    show(templatesSection);
-    renderTemplates();
-  } else {
-    alert('Save failed');
-  }
 });
 
 skillsInput.addEventListener('keydown', (event) => {
@@ -923,6 +1209,8 @@ skillsInput.addEventListener('keydown', (event) => {
   profileState.skills.push({ name: value });
   skillsInput.value = '';
   renderSkillChips();
+  syncLivePreview();
+  queueAutoSave();
 });
 
 function renderSkillChips() {
@@ -933,13 +1221,15 @@ function renderSkillChips() {
     const chip = document.createElement('span');
     chip.className = 'chip';
     const text = document.createElement('span');
-    text.textContent = skill.name || skill;
+    text.textContent = safeStr(skill?.name) || (typeof skill === 'string' ? skill : '');
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.textContent = '×';
     remove.onclick = () => {
       profileState.skills.splice(index, 1);
       renderSkillChips();
+      syncLivePreview();
+      queueAutoSave();
     };
     chip.append(text, remove);
     skillsChips.appendChild(chip);
@@ -1020,21 +1310,32 @@ function sanitizeHtml(html) {
 }
 
 function formatMonth(value) {
-  if (!value) return '';
+  if (!value || typeof value !== 'string') return '';
   const [year, month] = value.split('-').map(Number);
   if (!year || !month) return value;
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${months[month - 1]} ${year}`;
 }
 
-Array.from(document.querySelectorAll('.add-entry')).forEach((btn) => {
-  btn.addEventListener('click', () => openModal(btn.dataset.section));
-});
-
-selectorButtons.forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const target = btn.dataset.target;
-    setActivePanel(target);
+Array.from(document.querySelectorAll('.entry-select')).forEach((select) => {
+  select.addEventListener('change', () => {
+    const sectionId = select.dataset.section;
+    const value = select.value;
+    if (!sectionId || !value) return;
+    if (value === '__edit__') {
+      const card = document.querySelector(`.section-card[data-accordion="${sectionId}"]`);
+      card?.classList.add('expanded');
+      card?.classList.remove('collapsed');
+      select.value = '__edit__';
+      return;
+    }
+    if (sectionId === 'basics' || sectionId === 'skills') return;
+    if (value === '__new__') {
+      openInlineEditor(sectionId);
+      select.value = '__new__';
+    } else {
+      openInlineEditor(sectionId, Number(value));
+    }
   });
 });
 
@@ -1110,18 +1411,82 @@ function syncPreview() {
 
 window.addEventListener('message', (event) => {
   if (event.data?.type === 'ready') {
-    event.source?.postMessage({ type: 'profile', profile: currentProfile }, '*');
+    event.source?.postMessage({ type: 'profile', profile: buildLiveProfile() }, '*');
   }
 });
 
 init();
-function setActivePanel(panelId) {
-  const hasSelection = Boolean(panelId);
-  builderLayout?.classList.toggle('builder-empty', !hasSelection);
-  detailPanels.forEach((panel) => {
-    panel.classList.toggle('hidden', panel.dataset.panel !== panelId);
+let accordionBound = false;
+function initAccordion() {
+  const stack = document.querySelector('.section-stack');
+  const cards = document.querySelectorAll('.section-card[data-accordion]');
+  cards.forEach((card) => {
+    if (!card.classList.contains('expanded')) {
+      card.classList.add('collapsed');
+    }
   });
-  selectorButtons.forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.target === panelId);
+  if (!stack || accordionBound) return;
+  accordionBound = true;
+  stack.addEventListener('click', (e) => {
+    const card = e.target.closest('.section-card[data-accordion]');
+    if (!card) return;
+    if (e.target.closest('select, input, textarea, button, .month-picker, .month-input-wrap, .rte')) return;
+    const cardsAll = document.querySelectorAll('.section-card[data-accordion]');
+    const isExpanded = card.classList.contains('expanded');
+    if (isExpanded) {
+      card.classList.remove('expanded');
+      card.classList.add('collapsed');
+      return;
+    }
+    cardsAll.forEach((c) => {
+      c.classList.remove('expanded');
+      c.classList.add('collapsed');
+    });
+    card.classList.add('expanded');
+    card.classList.remove('collapsed');
+  });
+}
+
+function initDropdowns() {
+  const selects = document.querySelectorAll('.entry-select');
+  selects.forEach((select) => {
+    const actions = select.closest('.section-actions');
+    if (!actions) return;
+    let wrapper = actions.querySelector('.entry-dropdown');
+    if (!wrapper) {
+      wrapper = document.createElement('div');
+      wrapper.className = 'entry-dropdown';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'entry-dropdown-toggle';
+      btn.setAttribute('aria-label', 'Open menu');
+      const menu = document.createElement('div');
+      menu.className = 'entry-dropdown-menu';
+      wrapper.append(btn, menu);
+      actions.appendChild(wrapper);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.classList.toggle('open');
+      });
+      document.addEventListener('click', () => {
+        menu.classList.remove('open');
+      });
+    }
+    const menu = wrapper.querySelector('.entry-dropdown-menu');
+    if (!menu) return;
+    menu.innerHTML = '';
+    Array.from(select.options).forEach((opt) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'entry-dropdown-item';
+      item.textContent = opt.textContent;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        select.value = opt.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        menu.classList.remove('open');
+      });
+      menu.appendChild(item);
+    });
   });
 }
