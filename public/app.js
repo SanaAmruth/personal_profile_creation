@@ -91,6 +91,13 @@ const sectionDefs = {
   achievements: {
     label: 'Achievements',
     fields: [{ key: 'name', label: 'Achievement' }]
+  },
+  links: {
+    label: 'Links',
+    fields: [
+      { key: 'label', label: 'Label' },
+      { key: 'url', label: 'URL' }
+    ]
   }
 };
 
@@ -121,7 +128,8 @@ function emptyProfile() {
     experience: [],
     projects: [],
     skills: [],
-    achievements: []
+    achievements: [],
+    links: []
   };
 }
 
@@ -142,7 +150,8 @@ function normalizeProfile(profile) {
     experience: Array.isArray(profile.experience) ? profile.experience.map((e) => ({ title: e })) : [],
     projects: Array.isArray(profile.projects) ? profile.projects.map((p) => ({ name: p })) : [],
     skills: [],
-    achievements: []
+    achievements: [],
+    links: Array.isArray(profile.links) ? profile.links.map((l) => ({ url: l, label: l })) : []
   };
 }
 
@@ -509,7 +518,7 @@ function buildLiveProfile() {
     projects,
     skills: profileState.skills,
     achievements,
-    links: []
+    links
   };
 }
 
@@ -685,7 +694,7 @@ function renderSections() {
       select.value = items.length ? '0' : '__new__';
     }
 
-    if (!container) return;
+    if (!container || sectionId === 'links') return;
     const actionsRow = document.createElement('div');
     actionsRow.className = 'entry-actions-row';
     const addBtn = document.createElement('button');

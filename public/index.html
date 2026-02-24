@@ -195,6 +195,10 @@
               <div class="section-head">
                 <div>
                   <h3>Links</h3>
+                  <p>LinkedIn and GitHub social links.</p>
+                </div>
+                <div class="section-actions">
+                  <select class="entry-select" data-section="links"></select>
                 </div>
               </div>
               <div class="section-body">
@@ -204,52 +208,51 @@
                   <label>GitHub (optional)</label>
                   <input id="basic-github" placeholder="https://github.com/username" />
                 </div>
+                <div id="section-links" class="hidden"></div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-  </div>
 
-  <div class="builder-preview">
-    <div class="preview-header">
-      <div class="preview-actions">
-        <button id="github-connect" class="secondary">Connect GitHub</button>
-        <button id="github-cancel" class="ghost hidden">Cancel</button>
+        <div class="builder-preview">
+          <div class="preview-header">
+            <div class="preview-actions">
+              <button id="github-connect" class="secondary">Connect GitHub</button>
+              <button id="github-cancel" class="ghost hidden">Cancel</button>
+            </div>
+            <div class="preview-deploy">
+              <button id="deploy-btn" class="primary">Deploy</button>
+              <div id="deploy-status" class="status-text"></div>
+            </div>
+          </div>
+          <div class="preview-shell">
+            <iframe id="live-preview" title="Live preview" src="/preview.html?template=profile"></iframe>
+          </div>
+          <div class="preview-footer"></div>
+        </div>
       </div>
-      <div class="preview-deploy">
-        <button id="deploy-btn" class="primary">Deploy</button>
-        <div id="deploy-status" class="status-text"></div>
-      </div>
-    </div>
-    <div class="preview-shell">
-      <iframe id="live-preview" title="Live preview" src="/preview.html?template=profile"></iframe>
-    </div>
-    <div class="preview-footer"></div>
-  </div>
-  </div>
-  </section>
+    </section>
 
-  <section id="templates-section" class="panel hidden">
-    <div class="templates-header">
-      <div>
-        <h1>Choose a template</h1>
-        <p>Preview your content applied live.</p>
+    <section id="templates-section" class="panel hidden">
+      <div class="templates-header">
+        <div>
+          <h1>Choose a template</h1>
+          <p>Preview your content applied live.</p>
+        </div>
+        <div class="header-actions">
+          <button id="edit-info" class="ghost">Edit info</button>
+          <button id="github-connect" class="secondary">Connect GitHub</button>
+          <button id="github-cancel" class="ghost hidden">Cancel</button>
+        </div>
       </div>
-      <div class="header-actions">
-        <button id="edit-info" class="ghost">Edit info</button>
-        <button id="github-connect" class="secondary">Connect GitHub</button>
-        <button id="github-cancel" class="ghost hidden">Cancel</button>
+
+      <div id="template-gallery" class="gallery"></div>
+
+      <div id="host-panel" class="host-panel">
+        <div class="status" id="host-status">Connect GitHub to host your site.</div>
+        <button id="host-btn" disabled>Host on GitHub Pages</button>
       </div>
-    </div>
-
-    <div id="template-gallery" class="gallery"></div>
-
-    <div id="host-panel" class="host-panel">
-      <div class="status" id="host-status">Connect GitHub to host your site.</div>
-      <button id="host-btn" disabled>Host on GitHub Pages</button>
-    </div>
-  </section>
+    </section>
   </div>
 
   <div id="entry-modal" class="modal hidden">
