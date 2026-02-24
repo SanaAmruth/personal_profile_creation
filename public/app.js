@@ -5,10 +5,7 @@ const livePreview = document.getElementById('live-preview');
 const authBar = document.getElementById('auth-bar');
 const navHome = document.getElementById('nav-home');
 
-const loginForm = document.getElementById('login-form');
-const registerForm = document.getElementById('register-form');
-const showRegisterBtn = document.getElementById('show-register');
-const showLoginBtn = document.getElementById('show-login');
+
 const authMessage = document.getElementById('auth-message');
 const templateGallery = document.getElementById('template-gallery');
 const githubConnect = document.getElementById('github-connect');
@@ -241,51 +238,7 @@ async function init() {
   }
 }
 
-loginForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const formData = new FormData(loginForm);
-  const res = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: formData.get('email'), password: formData.get('password') })
-  });
-  if (res.ok) {
-    window.location.reload();
-  } else {
-    const json = await res.json().catch(() => ({}));
-    showAuthMessage(json.error || 'Login failed');
-  }
-});
 
-registerForm?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const formData = new FormData(registerForm);
-  const res = await fetch('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: formData.get('email'), password: formData.get('password') })
-  });
-  if (res.ok) {
-    registerForm.classList.add('hidden');
-    loginForm.classList.remove('hidden');
-    showAuthMessage('Account created. Please log in.');
-  } else {
-    const json = await res.json().catch(() => ({}));
-    showAuthMessage(json.error || 'Registration failed');
-  }
-});
-
-showRegisterBtn?.addEventListener('click', () => {
-  loginForm.classList.add('hidden');
-  registerForm.classList.remove('hidden');
-  hideAuthMessage();
-});
-
-showLoginBtn?.addEventListener('click', () => {
-  registerForm.classList.add('hidden');
-  loginForm.classList.remove('hidden');
-  hideAuthMessage();
-});
 
 function showAuthMessage(text) {
   if (!authMessage) return;

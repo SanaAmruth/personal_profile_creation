@@ -22,13 +22,15 @@ const {
   SESSION_SECRET,
   GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
   APP_BASE_URL,
   TURSO_DATABASE_URL,
   TURSO_AUTH_TOKEN
 } = process.env;
 
-if (!SESSION_SECRET || !GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET || !APP_BASE_URL) {
-  console.warn('Missing env vars. Create .env with SESSION_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, APP_BASE_URL');
+if (!SESSION_SECRET || !GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET || !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !APP_BASE_URL) {
+  console.warn('Missing env vars. Create .env with SESSION_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, APP_BASE_URL');
 }
 
 app.use(express.json({ limit: '25mb' }));
@@ -154,50 +156,75 @@ function requireLogin(req, res, next) {
   next();
 }
 
-// Email + password auth
-app.post('/api/auth/register', async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  try {
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const existing = await getQuery('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
-    if (existing) return res.status(409).json({ error: 'Email already in use' });
-    const hash = await bcrypt.hash(password, 12);
-    const now = new Date().toISOString();
-    await performQuery(
-      'INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)',
-      [normalizedEmail, hash, now]
-    );
-    res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Registration failed' });
-  }
+// Google OAuth begin
+app.get('/auth/google', (req, res) => {
+  const state = uuidv4();
+  req.session.googleState = state;
+  const redirect = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
+    GOOGLE_CLIENT_ID || ''
+  )}&redirect_uri=${encodeURIComponent(`${APP_BASE_URL}/auth/google/callback`)}&response_type=code&scope=email%20profile&state=${state}&prompt=select_account`;
+  res.redirect(redirect);
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+app.get('/auth/google/callback', async (req, res) => {
+  const { code, state } = req.query;
+  if (!code || !state || state !== req.session.googleState) {
+    return res.status(400).send('Invalid OAuth state');
+  }
+
   try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        code,
+        redirect_uri: `${APP_BASE_URL}/auth/google/callback`,
+        grant_type: 'authorization_code'
+      })
+    });
+
+    const tokenJson = await tokenRes.json();
+    if (!tokenJson.access_token) {
+      return res.status(400).send('Google OAuth failed');
+    }
+
+    const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokenJson.access_token}` }
+    });
+    const userJson = await userRes.json();
+    const email = userJson.email;
+
+    if (!email) {
+      return res.status(400).send('Google account has no email');
+    }
+
     const normalizedEmail = String(email).trim().toLowerCase();
-    const user = await getQuery('SELECT id, password_hash FROM users WHERE email = ?', [normalizedEmail]);
+    let user = await getQuery('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+
     if (!user) {
-      return req.session.destroy(() =>
-        res.status(401).json({ error: 'Account not found. Please sign up.' })
+      // Auto-register user
+      const hash = await bcrypt.hash('[GOOGLE_AUTH]', 12);
+      const now = new Date().toISOString();
+      await performQuery(
+        'INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)',
+        [normalizedEmail, hash, now]
       );
+      user = await getQuery('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
     }
-    const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) {
-      return req.session.destroy(() => res.status(401).json({ error: 'Invalid credentials' }));
-    }
+
     req.session.regenerate((err) => {
-      if (err) return res.status(500).json({ error: 'Session error' });
+      if (err) return res.status(500).send('Session error');
       req.session.userId = user.id;
-      res.json({ ok: true });
+      res.redirect('/');
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).send('Google OAuth error');
   }
 });
 

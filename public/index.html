@@ -22,26 +22,11 @@
       <h1>Sign in</h1>
       <p>Use a secure login to access the builder.</p>
       <div id="auth-message" class="auth-message hidden"></div>
-      <form id="login-form">
-        <label>Email</label>
-        <input type="email" name="email" placeholder="you@example.com" required />
-        <label>Password</label>
-        <input type="password" name="password" placeholder="••••••••" required />
-        <button type="submit" class="primary">Login</button>
-      </form>
-      <div class="auth-switch">
-        <span>New here?</span>
-        <button id="show-register" class="ghost" type="button">Sign up</button>
+      <div class="google-login-container" style="margin-top: 2rem; display: flex; justify-content: center;">
+        <a href="/auth/google" class="button primary" style="text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 4px; display: inline-block;">
+          Sign in with Google
+        </a>
       </div>
-      <form id="register-form" class="hidden">
-        <h2 class="signup-title">Create account</h2>
-        <label>Email</label>
-        <input type="email" name="email" placeholder="you@example.com" required />
-        <label>Password</label>
-        <input type="password" name="password" placeholder="Create a password" required />
-        <button type="submit" class="secondary">Sign up</button>
-        <button id="show-login" class="ghost" type="button">Back to login</button>
-      </form>
     </section>
 
     <section id="form-section" class="panel hidden">
