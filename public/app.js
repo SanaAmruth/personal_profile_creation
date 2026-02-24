@@ -91,13 +91,6 @@ const sectionDefs = {
   achievements: {
     label: 'Achievements',
     fields: [{ key: 'name', label: 'Achievement' }]
-  },
-  links: {
-    label: 'Links',
-    fields: [
-      { key: 'label', label: 'Label' },
-      { key: 'url', label: 'URL' }
-    ]
   }
 };
 
@@ -128,8 +121,7 @@ function emptyProfile() {
     experience: [],
     projects: [],
     skills: [],
-    achievements: [],
-    links: []
+    achievements: []
   };
 }
 
@@ -150,8 +142,7 @@ function normalizeProfile(profile) {
     experience: Array.isArray(profile.experience) ? profile.experience.map((e) => ({ title: e })) : [],
     projects: Array.isArray(profile.projects) ? profile.projects.map((p) => ({ name: p })) : [],
     skills: [],
-    achievements: [],
-    links: Array.isArray(profile.links) ? profile.links.map((l) => ({ url: l, label: l })) : []
+    achievements: []
   };
 }
 
@@ -518,7 +509,7 @@ function buildLiveProfile() {
     projects,
     skills: profileState.skills,
     achievements,
-    links
+    links: []
   };
 }
 
