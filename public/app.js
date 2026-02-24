@@ -262,7 +262,7 @@ const authTitle = document.getElementById('auth-title');
 const authSwitchText = document.getElementById('auth-switch-text');
 const authSubtitle = document.querySelector('.auth-subtitle');
 
-let isLoginMode = false;
+let isLoginMode = true;
 
 function setAuthMode(login) {
   isLoginMode = login;
