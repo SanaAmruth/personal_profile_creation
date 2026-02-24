@@ -241,16 +241,93 @@ async function init() {
 
 
 function showAuthMessage(text) {
-  if (!authMessage) return;
-  authMessage.textContent = text;
-  authMessage.classList.remove('hidden');
+  const msg = document.getElementById('auth-message');
+  if (!msg) return;
+  msg.textContent = text;
+  msg.classList.remove('hidden');
 }
 
 function hideAuthMessage() {
-  if (!authMessage) return;
-  authMessage.textContent = '';
-  authMessage.classList.add('hidden');
+  const msg = document.getElementById('auth-message');
+  if (!msg) return;
+  msg.textContent = '';
+  msg.classList.add('hidden');
 }
+
+// Auth Form Logic
+const authForm = document.getElementById('auth-form');
+const authSubmitBtn = document.getElementById('auth-submit-btn');
+const authToggleBtn = document.getElementById('auth-toggle-btn');
+const authTitle = document.getElementById('auth-title');
+const authSwitchText = document.getElementById('auth-switch-text');
+const authSubtitle = document.querySelector('.auth-subtitle');
+
+let isLoginMode = false;
+
+function setAuthMode(login) {
+  isLoginMode = login;
+  hideAuthMessage();
+  if (isLoginMode) {
+    authTitle.textContent = 'Welcome back';
+    authSubtitle.textContent = 'Please enter your details';
+    authSubmitBtn.textContent = 'Sign in';
+    authSwitchText.textContent = "Don't have an account?";
+    authToggleBtn.textContent = 'Sign up';
+  } else {
+    authTitle.textContent = 'Create an account';
+    authSubtitle.textContent = 'Sign up to build your portfolio';
+    authSubmitBtn.textContent = 'Sign up';
+    authSwitchText.textContent = 'Already have an account?';
+    authToggleBtn.textContent = 'Sign in';
+  }
+}
+
+if (authToggleBtn) {
+  authToggleBtn.addEventListener('click', () => {
+    setAuthMode(!isLoginMode);
+  });
+}
+
+if (authForm) {
+  authForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideAuthMessage();
+    const email = document.getElementById('auth-email').value;
+    const password = document.getElementById('auth-password').value;
+    const rememberText = document.getElementById('remember-me').checked;
+
+    const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
+
+    try {
+      authSubmitBtn.disabled = true;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, rememberText })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showAuthMessage(data.error || 'Authentication failed');
+        authSubmitBtn.disabled = false;
+        return;
+      }
+
+      if (isLoginMode) {
+        window.location.reload();
+      } else {
+        showAuthMessage('Sign up successful! You can now sign in.');
+        authForm.reset();
+        setAuthMode(true);
+        authSubmitBtn.disabled = false;
+      }
+    } catch (err) {
+      showAuthMessage('Network error. Please try again.');
+      authSubmitBtn.disabled = false;
+    }
+  });
+}
+
 
 editInfoBtn.addEventListener('click', () => {
   initBuilder(normalizeProfile(currentProfile));

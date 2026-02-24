@@ -156,6 +156,81 @@ function requireLogin(req, res, next) {
   next();
 }
 
+// Email + password auth
+app.post('/api/auth/register', async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  try {
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    // Simple regex validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const existing = await getQuery('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    if (existing) return res.status(409).json({ error: 'Email already in use' });
+
+    const hash = await bcrypt.hash(password, 12);
+    const now = new Date().toISOString();
+    await performQuery(
+      'INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)',
+      [normalizedEmail, hash, now]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password, rememberText } = req.body || {};
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  try {
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const user = await getQuery('SELECT id, password_hash FROM users WHERE email = ?', [normalizedEmail]);
+    if (!user) {
+      return req.session.destroy(() =>
+        res.status(401).json({ error: 'Account not found. Please sign up.' })
+      );
+    }
+
+    // Don't allow password login for Google-only accounts unless they actually set a password
+    if (user.password_hash === '[GOOGLE_AUTH]') {
+      return req.session.destroy(() =>
+        res.status(401).json({ error: 'Log in with Google, or reset your password.' })
+      );
+    }
+
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) {
+      return req.session.destroy(() => res.status(401).json({ error: 'Invalid credentials' }));
+    }
+
+    req.session.regenerate((err) => {
+      if (err) return res.status(500).json({ error: 'Session error' });
+
+      // Handle "Remember for 30 days" check
+      if (rememberText === 'on' || rememberText === true) {
+        req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+      } else {
+        req.session.cookie.expires = false;
+      }
+
+      req.session.userId = user.id;
+      res.json({ ok: true });
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
 // Google OAuth begin
 app.get('/auth/google', (req, res) => {
   const state = uuidv4();
