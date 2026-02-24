@@ -1454,6 +1454,8 @@ function initAccordion() {
   stack.addEventListener('click', (e) => {
     const card = e.target.closest('.section-card[data-accordion]');
     if (!card) return;
+    // Don't collapse when interacting with body content
+    if (e.target.closest('.section-body')) return;
     if (e.target.closest('select, input, textarea, button, .month-picker, .month-input-wrap, .rte')) return;
     const cardsAll = document.querySelectorAll('.section-card[data-accordion]');
     const isExpanded = card.classList.contains('expanded');
@@ -1468,6 +1470,20 @@ function initAccordion() {
     });
     card.classList.add('expanded');
     card.classList.remove('collapsed');
+  });
+
+  // Click on an entry row (not its action buttons) → open editor
+  stack.addEventListener('click', (e) => {
+    if (e.target.closest('.entry-btn')) return; // handled by individual button
+    const entryItem = e.target.closest('.entry-item');
+    if (!entryItem) return;
+    const card = entryItem.closest('.section-card[data-accordion]');
+    if (!card) return;
+    const sectionId = card.dataset.accordion;
+    const list = entryItem.closest('.entry-list');
+    if (!list) return;
+    const index = Array.from(list.children).indexOf(entryItem);
+    if (index >= 0) openInlineEditor(sectionId, index);
   });
 }
 
