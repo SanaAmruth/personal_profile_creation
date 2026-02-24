@@ -700,7 +700,7 @@ function renderSections() {
       meta.textContent = summary.meta;
 
       info.append(title, meta);
-      if ((sectionId === 'projects' || sectionId === 'experience') && Array.isArray(item.skills) && item.skills.length) {
+      if (sectionId === 'projects' && Array.isArray(item.skills) && item.skills.length) {
         const chipRow = document.createElement('div');
         chipRow.className = 'chip-row';
         item.skills.forEach((skill) => {
