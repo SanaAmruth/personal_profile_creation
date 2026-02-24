@@ -512,17 +512,18 @@ button:disabled {
   padding: 10px;
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
+  height: calc(100vh - 200px);
   min-height: 600px;
+  overflow: hidden;
 }
 
 .preview-shell iframe {
   width: 100%;
-  height: calc(100vh - 220px);
-  min-height: 560px;
+  height: 100%;
   border: 0;
   border-radius: 16px;
   background: #0f1014;
-  overflow: auto;
+  display: block;
 }
 
 .profile-card {
@@ -1140,21 +1141,7 @@ button:disabled {
 }
 
 @media (max-width: 1400px) {
-  .preview-shell {
-    height: 600px;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .preview-shell iframe {
-    width: 133%;
-    height: 133%;
-    transform: scale(0.75);
-    transform-origin: top left;
-    position: absolute;
-    top: 10px;
-    left: 10px;
-  }
+  /* Preview scrolls naturally — no transform scaling */
 }
 
 @media (max-width: 1100px) {
@@ -1184,18 +1171,11 @@ button:disabled {
 
   .preview-shell {
     height: 520px;
-    overflow: hidden;
-    position: relative;
   }
 
   .preview-shell iframe {
-    width: 150%;
-    height: 150%;
-    transform: scale(0.66);
-    transform-origin: top left;
-    position: absolute;
-    top: 10px;
-    left: 10px;
+    width: 100%;
+    height: 100%;
   }
 }
 
@@ -1221,8 +1201,7 @@ button:disabled {
   }
 
   .preview-shell iframe {
-    width: 200%;
-    height: 200%;
-    transform: scale(0.5);
+    width: 100%;
+    height: 100%;
   }
 }
