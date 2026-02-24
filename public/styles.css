@@ -647,31 +647,27 @@ button:disabled {
   display: none;
 }
 
-.entry-dropdown {
-  position: relative;
-}
-
-.entry-dropdown-toggle {
+.section-chevron {
   width: 36px;
   height: 36px;
-  padding: 0;
   border-radius: 50%;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #e8e8e8;
   background: #fff;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 14px 14px;
-  transition: transform 0.3s ease, background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  flex-shrink: 0;
+  transition: transform 0.3s ease, background 0.2s;
+  pointer-events: none;
 }
 
-.section-card.expanded .entry-dropdown-toggle {
+.section-card.expanded .section-chevron {
   transform: rotate(180deg);
 }
 
-.entry-dropdown-toggle:hover {
-  background-color: #f8f9fa;
+.section-head:hover .section-chevron {
+  background: #f5f5f5;
 }
 
 .links-fixed {

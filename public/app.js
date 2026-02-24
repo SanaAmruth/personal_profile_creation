@@ -649,63 +649,16 @@ function renderSections() {
   Object.keys(sectionDefs).forEach((sectionId) => {
     const container = document.getElementById(`section-${sectionId}`);
     const items = profileState[sectionId] || [];
-    const card = document.querySelector(`.section-card[data-accordion="${sectionId}"]`);
-    const actions = card?.querySelector('.section-actions');
-    if (actions) {
-      if (sectionId === 'basics' || sectionId === 'skills') {
-        actions.classList.remove('hidden');
-      } else {
-        actions.classList.add('hidden');
-      }
-    }
 
-    if (sectionId === 'basics') {
-      const select = document.querySelector(`.entry-select[data-section="basics"]`);
-      if (select) {
-        select.innerHTML = '';
-        const editOption = document.createElement('option');
-        editOption.value = '__edit__';
-        editOption.textContent = 'Edit';
-        select.appendChild(editOption);
-        select.value = '__edit__';
-      }
-      return;
-    }
+    if (sectionId === 'basics') return;
+
     if (sectionId !== 'skills' && container) {
       container.innerHTML = '';
     }
 
     if (sectionId === 'skills') {
-      const select = document.querySelector(`.entry-select[data-section="skills"]`);
-      if (select) {
-        select.innerHTML = '';
-        const opt = document.createElement('option');
-        opt.value = '__edit__';
-        opt.textContent = 'Edit';
-        select.appendChild(opt);
-        select.value = '__edit__';
-      }
       renderSkillChips();
       return;
-    }
-
-    const select = document.querySelector(`.entry-select[data-section="${sectionId}"]`);
-    if (select) {
-      select.innerHTML = '';
-      if (items.length) {
-        items.forEach((item, index) => {
-          const summary = getEntrySummary(sectionId, item);
-          const option = document.createElement('option');
-          option.value = String(index);
-          option.textContent = summary.title || `Entry ${index + 1}`;
-          select.appendChild(option);
-        });
-      }
-      const addOption = document.createElement('option');
-      addOption.value = '__new__';
-      addOption.textContent = 'Add entry';
-      select.appendChild(addOption);
-      select.value = items.length ? '0' : '__new__';
     }
 
     if (!container || sectionId === 'links') return;
@@ -1519,45 +1472,5 @@ function initAccordion() {
 }
 
 function initDropdowns() {
-  const selects = document.querySelectorAll('.entry-select');
-  selects.forEach((select) => {
-    const actions = select.closest('.section-actions');
-    if (!actions) return;
-    let wrapper = actions.querySelector('.entry-dropdown');
-    if (!wrapper) {
-      wrapper = document.createElement('div');
-      wrapper.className = 'entry-dropdown';
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'entry-dropdown-toggle';
-      btn.setAttribute('aria-label', 'Open menu');
-      const menu = document.createElement('div');
-      menu.className = 'entry-dropdown-menu';
-      wrapper.append(btn, menu);
-      actions.appendChild(wrapper);
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        menu.classList.toggle('open');
-      });
-      document.addEventListener('click', () => {
-        menu.classList.remove('open');
-      });
-    }
-    const menu = wrapper.querySelector('.entry-dropdown-menu');
-    if (!menu) return;
-    menu.innerHTML = '';
-    Array.from(select.options).forEach((opt) => {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'entry-dropdown-item';
-      item.textContent = opt.textContent;
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        select.value = opt.value;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        menu.classList.remove('open');
-      });
-      menu.appendChild(item);
-    });
-  });
+  // Legacy dropdown removed — entries now display in the section body.
 }
