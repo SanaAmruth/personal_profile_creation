@@ -176,6 +176,20 @@ function renderAuthBar(user) {
   }
 }
 
+const addContentBtn = document.getElementById('add-content-btn');
+if (addContentBtn) {
+  addContentBtn.addEventListener('click', () => {
+    // Scroll to section selector or open a generic "Add" modal
+    // For now, let's pulse the section headers or just scroll up
+    const firstSection = document.querySelector('.section-card:not(.expanded)');
+    if (firstSection) {
+      firstSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      firstSection.classList.add('pulse-glow');
+      setTimeout(() => firstSection.classList.remove('pulse-glow'), 2000);
+    }
+  });
+}
+
 navHome?.addEventListener('click', () => {
   window.location.href = '/';
 });
@@ -696,11 +710,16 @@ function renderSections() {
 
     if (!container || sectionId === 'links') return;
     const actionsRow = document.createElement('div');
-    actionsRow.className = 'entry-actions-row';
+    actionsRow.className = 'add-entry-wrap';
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'add-entry-btn';
-    addBtn.innerHTML = '<span class="add-entry-plus">+</span><span>Add Entry</span>';
+    addBtn.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+      <span>Add Entry</span>
+    `;
     addBtn.onclick = () => openInlineEditor(sectionId);
     actionsRow.appendChild(addBtn);
     container.appendChild(actionsRow);
@@ -710,9 +729,14 @@ function renderSections() {
 
     items.forEach((item, index) => {
       const entry = document.createElement('div');
-      entry.className = 'entry-item';
+      entry.className = `entry-item ${item.hidden ? 'hidden-entry' : ''}`;
+
+      const dragHandle = document.createElement('div');
+      dragHandle.className = 'entry-drag-handle';
+      dragHandle.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecapround="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>';
 
       const info = document.createElement('div');
+      info.className = 'entry-info';
       const title = document.createElement('div');
       title.className = 'entry-title';
       const meta = document.createElement('div');
@@ -738,23 +762,44 @@ function renderSections() {
       const actions = document.createElement('div');
       actions.className = 'entry-actions';
 
+      const visBtn = document.createElement('button');
+      visBtn.type = 'button';
+      visBtn.className = `entry-btn visibility-toggle ${item.hidden ? 'hidden-entry' : ''}`;
+      visBtn.innerHTML = item.hidden
+        ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>'
+        : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+      visBtn.title = item.hidden ? 'Show on website' : 'Hide from website';
+      visBtn.onclick = (e) => {
+        e.stopPropagation();
+        item.hidden = !item.hidden;
+        renderSections();
+        syncLivePreview();
+        queueAutoSave();
+      };
+
       const editBtn = document.createElement('button');
-      editBtn.className = 'ghost';
-      editBtn.textContent = 'Edit';
-      editBtn.onclick = () => openInlineEditor(sectionId, index);
+      editBtn.type = 'button';
+      editBtn.className = 'entry-btn';
+      editBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+      editBtn.onclick = (e) => {
+        e.stopPropagation();
+        openInlineEditor(sectionId, index);
+      };
 
       const delBtn = document.createElement('button');
-      delBtn.className = 'secondary';
-      delBtn.textContent = 'Remove';
-      delBtn.onclick = () => {
+      delBtn.type = 'button';
+      delBtn.className = 'entry-btn';
+      delBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
         profileState[sectionId].splice(index, 1);
         renderSections();
         syncLivePreview();
         queueAutoSave();
       };
 
-      actions.append(editBtn, delBtn);
-      entry.append(info, actions);
+      actions.append(visBtn, editBtn, delBtn);
+      entry.append(dragHandle, info, actions);
       list.appendChild(entry);
     });
 
@@ -1244,24 +1289,20 @@ skillsInput.addEventListener('keydown', (event) => {
 });
 
 function renderSkillChips() {
-  if (!skillsChips) return;
   skillsChips.innerHTML = '';
-  const items = profileState.skills || [];
-  items.forEach((skill, index) => {
-    const chip = document.createElement('span');
+  (profileState.skills || []).forEach((skill, index) => {
+    const chip = document.createElement('div');
     chip.className = 'chip';
-    const text = document.createElement('span');
-    text.textContent = safeStr(skill?.name) || (typeof skill === 'string' ? skill : '');
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.textContent = '×';
-    remove.onclick = () => {
+    chip.textContent = skill.name || skill;
+    const btn = document.createElement('button');
+    btn.innerHTML = '&times;';
+    btn.onclick = () => {
       profileState.skills.splice(index, 1);
       renderSkillChips();
       syncLivePreview();
       queueAutoSave();
     };
-    chip.append(text, remove);
+    chip.appendChild(btn);
     skillsChips.appendChild(chip);
   });
 }

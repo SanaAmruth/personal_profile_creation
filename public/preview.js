@@ -80,7 +80,8 @@ function getProfileState(p) {
 const SECTION_IDS = { education: 'education', experience: 'experi', projects: 'work', achievements: 'achievements' };
 
 function renderSectionEducation(p) {
-  const list = p.education || [];
+  const list = (p.education || []).filter(e => !e.hidden);
+  if (!list.length) return '';
   return `<div class="row">
     <h2>Education</h2>
     ${list.map((e) => `
@@ -94,11 +95,12 @@ function renderSectionEducation(p) {
 }
 
 function renderSectionExperience(p) {
-  const list = p.experience || [];
+  const list = (p.experience || []).filter(e => !e.hidden);
+  if (!list.length) return '';
   return `<div class="row">
     <h2>Experience</h2>
     ${list.map((e) => `
-    <div class="card fade-up delay-2">
+    <div class="card fade-up delay-1">
       <h3>${escapeHtml([safeStr(e.title), safeStr(e.company)].filter(Boolean).join(' · ') || 'Role')}</h3>
       <p>${escapeHtml([e.location, dateRange(e.startDate, e.endDate)].filter(Boolean).join(' · '))}</p>
       <p>${sanitizeHtml(e.description || '')}</p>
@@ -109,30 +111,32 @@ function renderSectionExperience(p) {
 }
 
 function renderSectionProjects(p) {
-  const list = p.projects || [];
+  const list = (p.projects || []).filter(e => !e.hidden);
+  if (!list.length) return '';
   return `<div class="row">
     <h2>My Projects</h2>
     <div class="work__boxes">
       ${list.map((proj) => {
-        const name = escapeHtml(safeStr(proj.name) || 'Project');
-        const titleHtml = proj.link
-          ? `<a class="nav__link" href="${escapeAttr(proj.link)}" target="_blank" rel="noopener noreferrer">${name}</a>`
-          : name;
-        const desc = proj.description && proj.description.trim();
-        return `
+    const name = escapeHtml(safeStr(proj.name) || 'Project');
+    const titleHtml = proj.link
+      ? `<a class="nav__link" href="${escapeAttr(proj.link)}" target="_blank" rel="noopener noreferrer">${name}</a>`
+      : name;
+    const desc = proj.description && proj.description.trim();
+    return `
       <div class="work__box fade-up delay-1">
         <h3>${titleHtml}</h3>
         ${desc ? `<p>${sanitizeHtml(desc)}</p>` : ''}
         ${Array.isArray(proj.skills) && proj.skills.length ? `<ul class="work__list">${proj.skills.map((s) => `<li>${escapeHtml(typeof s === 'string' ? s : s?.name)}</li>`).join('')}</ul>` : ''}
       </div>
       `;
-      }).join('')}
+  }).join('')}
     </div>
   </div>`;
 }
 
 function renderSectionAchievements(p) {
-  const list = p.achievements || [];
+  const list = (p.achievements || []).filter(e => !e.hidden);
+  if (!list.length) return '';
   return `<div class="row">
     <h2>Achievements</h2>
     ${list.map((a) => `
@@ -158,7 +162,7 @@ function updateOnlySection(sectionKey) {
   }
 
   if (sectionKey === 'education') {
-    const list = p.education || [];
+    const list = (p.education || []).filter(e => !e.hidden);
     const cards = row.querySelectorAll('.card');
     list.forEach((e, i) => {
       const title = [safeStr(e.degree), safeStr(e.school)].filter(Boolean).join(' · ') || 'Education';
@@ -189,7 +193,7 @@ function updateOnlySection(sectionKey) {
   }
 
   if (sectionKey === 'experience') {
-    const list = p.experience || [];
+    const list = (p.experience || []).filter(e => !e.hidden);
     const cards = row.querySelectorAll('.card');
     list.forEach((e, i) => {
       const title = [safeStr(e.title), safeStr(e.company)].filter(Boolean).join(' · ') || 'Role';
@@ -222,7 +226,7 @@ function updateOnlySection(sectionKey) {
   }
 
   if (sectionKey === 'projects') {
-    const list = p.projects || [];
+    const list = (p.projects || []).filter(e => !e.hidden);
     const boxes = row.querySelectorAll('.work__boxes')[0];
     if (!boxes) {
       section.innerHTML = renderSectionProjects(p);
@@ -270,7 +274,7 @@ function updateOnlySection(sectionKey) {
   }
 
   if (sectionKey === 'achievements') {
-    const list = p.achievements || [];
+    const list = (p.achievements || []).filter(e => !e.hidden);
     const cards = row.querySelectorAll('.card');
     list.forEach((a, i) => {
       const name = safeStr(a.name) || safeStr(a) || 'Achievement';
@@ -299,14 +303,14 @@ function updateOnlySection(sectionKey) {
 
 function render() {
   try {
-  const p = normalizeProfile(currentProfile);
-  const basics = p.basics || {};
-  const state = getProfileState(p);
-  const { hasAbout, hasEducation, hasProjects, hasExperience, hasAchievements, hasContact, navItems } = state;
-  const isEmptyProfile = !state.hasBasics && !hasEducation && !hasProjects && !hasExperience && !hasAchievements && !hasContact && (!p.skills || p.skills.length === 0);
+    const p = normalizeProfile(currentProfile);
+    const basics = p.basics || {};
+    const state = getProfileState(p);
+    const { hasAbout, hasEducation, hasProjects, hasExperience, hasAchievements, hasContact, navItems } = state;
+    const isEmptyProfile = !state.hasBasics && !hasEducation && !hasProjects && !hasExperience && !hasAchievements && !hasContact && (!p.skills || p.skills.length === 0);
 
-  if (isEmptyProfile) {
-    root.innerHTML = `
+    if (isEmptyProfile) {
+      root.innerHTML = `
       <header class="header" id="top"></header>
       <footer class="footer">
         <div class="row">
@@ -314,10 +318,10 @@ function render() {
         </div>
       </footer>
     `;
-    return;
-  }
+      return;
+    }
 
-  root.innerHTML = `
+    root.innerHTML = `
     <header class="header" id="top">
       <div class="row header__top">
         ${basics.photo ? `<div class="header__avatar"><img src="${escapeAttr(basics.photo)}" alt="Profile photo" /></div>` : ''}
